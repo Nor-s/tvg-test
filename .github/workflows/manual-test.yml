@@ -1,0 +1,159 @@
+name: Manual ThorVG Pixel Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      reference_ref:
+        description: "ThorVG ref used to update reference images"
+        required: true
+        default: "v1.0.5"
+      test_ref:
+        description: "ThorVG ref tested against the reference images"
+        required: true
+        default: "main"
+      evaluator:
+        description: "Image comparison strategy"
+        required: true
+        default: "pixel"
+        type: choice
+        options:
+          - pixel
+          - flip
+      max_width:
+        description: "PNG fit cell width"
+        required: true
+        default: "200"
+      flip_surface_mean_threshold:
+        description: "FLIP mean threshold"
+        required: true
+        default: "0.025"
+      flip_surface_error_floor_threshold:
+        description: "Error contribution ignored per FLIP threshold"
+        required: true
+        default: "0.25"
+      pixel_channel_threshold:
+        description: "RGBA Chebyshev distance threshold for the pixel evaluator"
+        required: true
+        default: "12"
+      pixel_surface_diff_ratio_threshold:
+        description: "Weighted surface diff ratio threshold for the pixel evaluator (surface: excluding background and transparent pixels)"
+        required: true
+        default: "0.03"
+      pixel_background_ratio:
+        description: "Repeated visible color ratio used for common background detection"
+        required: true
+        default: "0.20"
+
+jobs:
+  run-manual-test:
+    name: Run pixel comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib/x86_64-linux-gnu/pkgconfig
+      LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib/x86_64-linux-gnu
+      WGPU_NATIVE_VERSION: v27.0.4.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            git \
+            meson \
+            ninja-build \
+            pkg-config \
+            python3 \
+            unzip \
+            wget \
+            libegl1-mesa-dev \
+            libfreetype6-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libharfbuzz-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libwebp-dev
+
+      - name: Install Chrome if missing
+        run: |
+          if ! command -v google-chrome >/dev/null 2>&1; then
+            wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get install -y /tmp/google-chrome.deb
+          fi
+
+      - name: Install wgpu_native
+        run: bash .github/workflows/install_wgpu_native.sh
+
+      - name: Run update and test
+        env:
+          REFERENCE_REF: ${{ inputs.reference_ref }}
+          TEST_REF: ${{ inputs.test_ref }}
+          EVALUATOR: ${{ inputs.evaluator }}
+          MAX_WIDTH: ${{ inputs.max_width }}
+          FLIP_SURFACE_MEAN_THRESHOLD: ${{ inputs.flip_surface_mean_threshold }}
+          FLIP_SURFACE_ERROR_FLOOR_THRESHOLD: ${{ inputs.flip_surface_error_floor_threshold }}
+          PIXEL_CHANNEL_THRESHOLD: ${{ inputs.pixel_channel_threshold }}
+          PIXEL_SURFACE_DIFF_RATIO_THRESHOLD: ${{ inputs.pixel_surface_diff_ratio_threshold }}
+          PIXEL_BACKGROUND_RATIO: ${{ inputs.pixel_background_ratio }}
+        run: |
+          echo "reference_ref=$REFERENCE_REF"
+          echo "test_ref=$TEST_REF"
+          echo "evaluator=$EVALUATOR"
+          echo "max_width=$MAX_WIDTH"
+
+          test_options=(
+            --evaluator "$EVALUATOR"
+            --max-width "$MAX_WIDTH"
+            --flip-surface-mean-threshold "$FLIP_SURFACE_MEAN_THRESHOLD"
+            --flip-surface-error-floor-threshold "$FLIP_SURFACE_ERROR_FLOOR_THRESHOLD"
+            --pixel-channel-threshold "$PIXEL_CHANNEL_THRESHOLD"
+            --pixel-surface-diff-ratio-threshold "$PIXEL_SURFACE_DIFF_RATIO_THRESHOLD"
+            --pixel-background-ratio "$PIXEL_BACKGROUND_RATIO"
+          )
+
+          bash ./update_and_run.sh "$REFERENCE_REF" "$TEST_REF" "${test_options[@]}"
+
+      - name: Upload report PDF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thorvg-pixel-report
+          path: artifacts/report/reporter.pdf
+          if-no-files-found: warn
+
+      - name: Fail if differences were found
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          data_path = pathlib.Path("artifacts/report/data.json")
+          if not data_path.exists():
+              print(f"Missing report data: {data_path}")
+              sys.exit(1)
+
+          data = json.loads(data_path.read_text())
+          summary = data.get("summary", {})
+          different = int(summary.get("different", 0))
+          failed = int(summary.get("failed", 0))
+
+          print(f"summary.different={different}")
+          print(f"summary.failed={failed}")
+
+          if different > 0:
+              print("Pixel differences were found.")
+              sys.exit(1)
+
+          if failed > 0:
+              print("Pixel comparison had failed cases.")
+              sys.exit(1)
+          PY

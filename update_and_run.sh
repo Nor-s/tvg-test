@@ -2,20 +2,26 @@
 
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <reference-ref> <test-ref>"
-    echo "Example: $0 v1.0.5 main"
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 <reference-ref> <test-ref> [test-options...]"
+    echo "Example: $0 v1.0.5 main --evaluator pixel"
     exit 1
 fi
 
 REFERENCE_REF="$1"
 TEST_REF="$2"
+shift 2
+
+TEST_OPTIONS=("$@")
+if [ "${#TEST_OPTIONS[@]}" -eq 0 ]; then
+    TEST_OPTIONS=(--evaluator pixel)
+fi
 
 bash ./install_thorvg.sh "$REFERENCE_REF"
-bash ./build_and_run.sh --evaluator pixel --update-reference
+bash ./build_and_run.sh "${TEST_OPTIONS[@]}" --update-reference
 
 bash ./install_thorvg.sh "$TEST_REF"
-bash ./build_and_run.sh --evaluator pixel
+bash ./build_and_run.sh "${TEST_OPTIONS[@]}"
 
 # Report
 REPORT_HTML="$(pwd)/artifacts/report/reporter.html"

@@ -126,10 +126,11 @@ tr[hidden]{display:none}@media(max-width:900px){main{padding:14px}.summary{grid-
 *{box-shadow:none!important}body{background:#fff;color:#111;font-size:9px}main{max-width:none;padding:0}
 h1{font-size:18px;margin:0 0 4mm}h2{font-size:13px;margin:0 0 3mm}.muted{color:#444}
 .filter,.pixel-inspector{display:none!important}.panel{margin:0 0 5mm;padding:0;border:0;background:#fff;break-inside:auto}.meta{display:grid;grid-template-columns:22mm 1fr;max-width:none;margin:0 0 4mm;padding:3mm;border:1px solid #bbb}.summary{grid-template-columns:repeat(4,1fr);gap:3mm;margin:0 0 5mm}.summary div{padding:3mm;border-color:#bbb}.summary b{font-size:16px}details{display:block}summary{display:none}
-.comparison{overflow:visible}table,thead,tbody,tr,td{display:block;width:100%!important}thead{display:none}tr{margin:0 0 5mm;padding:3mm;border:1px solid #bbb;break-inside:avoid;page-break-inside:avoid;background:#fff}tr::after{content:"";display:block;clear:both}td{border:0;padding:0}
-td:nth-child(1),td:nth-child(2){display:inline-block;width:auto!important;margin:0 4mm 2mm 0}.asset{font-size:9px}
-.images{float:left;width:31.7%!important;min-width:0;margin:0 2.4% 2mm 0;background:#fff;text-align:left}.images:nth-child(5){margin-right:0}.images::before{display:block;margin:0 0 1mm;color:#555;font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}.images:nth-child(3)::before{content:"reference"}.images:nth-child(4)::before{content:"test"}.images:nth-child(5)::before{content:"diff"}.images img{width:100%;max-width:100%;max-height:45mm;object-fit:contain;border:1px solid #bbb}
-td.num{display:inline-block;width:auto!important;margin:1mm 3mm 0 0;padding-top:1mm;border-top:1px solid #ddd;text-align:left;font-size:8px}.failed-list{font-size:9px}
+.comparison{overflow:visible}table,thead,tbody{display:block;width:100%!important}thead{display:none}tr{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:2mm 3mm;margin:0 0 5mm;padding:3mm;border:1px solid #bbb;break-inside:avoid;page-break-inside:avoid;background:#fff}tr[hidden]{display:none!important}td{min-width:0;border:0;padding:0}
+td::before{display:block;margin:0 0 1mm;color:#555;font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;line-height:1.2;content:attr(data-label)}
+.status{grid-column:1/2;grid-row:1;font-size:8px;text-transform:uppercase}.asset{grid-column:2/-1;grid-row:1;font-size:8px;overflow-wrap:anywhere;word-break:break-word}
+.images{width:auto!important;min-width:0;background:#fff;text-align:left;break-inside:avoid}.images img{display:block;box-sizing:border-box;width:100%;height:42mm;max-width:100%;max-height:42mm;object-fit:contain;border:1px solid #bbb;background:#fff}
+td.num{display:flex!important;gap:2mm;align-items:baseline;margin:0;padding:1.5mm 2mm;border:1px solid #ddd;border-radius:2mm;background:#fafafa;text-align:left;font-size:8px;overflow-wrap:anywhere}.num::before{flex:1 1 auto;margin:0}.failed-list{font-size:9px}
 }
 )";
 }
@@ -192,7 +193,7 @@ void _writeFilter(std::ofstream& report, const TestResult& result)
 
 void _writeImage(std::ofstream& report, const std::filesystem::path& reportPath, const std::string& path, const char* label)
 {
-    report << "<td class=\"images\"><img loading=\"lazy\" data-role=\"" << label << "\" alt=\"" << label << "\" src=\"" << _link(reportPath, path) << "\"></td>";
+    report << "<td class=\"images\" data-label=\"" << label << "\"><img loading=\"lazy\" data-role=\"" << label << "\" alt=\"" << label << "\" src=\"" << _link(reportPath, path) << "\"></td>";
 }
 
 void _writeMetricHeader(std::ofstream& report, const TestResult& result)
@@ -203,7 +204,8 @@ void _writeMetricHeader(std::ofstream& report, const TestResult& result)
 void _writeMetricCells(std::ofstream& report, const TestResult& result, const TestResult::Comparison& comparison)
 {
     for (size_t i = 0; i < result.metrics.size(); ++i) {
-        report << "<td class=\"num\">" << _metricValue(comparison, i) << "</td>";
+        const auto label = i < result.metrics.size() ? _html(result.metrics[i].label) : "";
+        report << "<td class=\"num\" data-label=\"" << label << "\">" << _metricValue(comparison, i) << "</td>";
     }
 }
 
@@ -237,8 +239,8 @@ void _writeBackend(std::ofstream& report, const TestResult& result, const TestRe
     report << "</tr></thead><tbody>";
     for (const auto& comparison : comparisons) {
         report << "<tr data-primary=\"" << _metricValue(comparison, result.primaryMetric) << "\">";
-        report << "<td class=\"status " << (comparison.different ? "diff" : "pass") << "\">" << (comparison.different ? "diff" : "pass") << "</td>";
-        report << "<td class=\"asset\">" << _html(comparison.asset) << "</td>";
+        report << "<td class=\"status " << (comparison.different ? "diff" : "pass") << "\" data-label=\"status\">" << (comparison.different ? "diff" : "pass") << "</td>";
+        report << "<td class=\"asset\" data-label=\"asset\">" << _html(comparison.asset) << "</td>";
         _writeImage(report, reportPath, comparison.reference, "reference");
         _writeImage(report, reportPath, comparison.test, "test");
         _writeImage(report, reportPath, comparison.diff, "diff");
